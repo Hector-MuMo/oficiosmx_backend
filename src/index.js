@@ -8,6 +8,27 @@ import cors    from 'cors'
 import otpRoutes        from './routes/otp.js'
 import contractorRoutes from './routes/contractors.js'
 import reviewRoutes     from './routes/reviews.js'
+import adRoutes         from './routes/ads.js'
+
+
+// ── Validar variables de entorno críticas al arrancar ────────
+const REQUIRED_IN_PROD = ['RESEND_API_KEY', 'ADMIN_TOKEN']
+const WARN_IF_MISSING  = ['ADMIN_TOKEN']
+
+for (const key of WARN_IF_MISSING) {
+  if (!process.env[key]?.trim()) {
+    console.warn(`[Config] ADVERTENCIA: ${key} no está definido en .env`)
+  }
+}
+
+if (process.env.NODE_ENV === 'production') {
+  for (const key of REQUIRED_IN_PROD) {
+    if (!process.env[key]?.trim()) {
+      console.error(`[Config] ERROR: ${key} es obligatorio en producción`)
+      process.exit(1)
+    }
+  }
+}
 
 const app  = express()
 const PORT = process.env.PORT ?? 3000
@@ -36,6 +57,7 @@ app.use(express.json())
 app.use('/api/otp',         otpRoutes)
 app.use('/api/contractors', contractorRoutes)
 app.use('/api/reviews',     reviewRoutes)
+app.use('/api/ads',         adRoutes)
 
 app.get('/api/health', (_, res) => {
   res.json({ ok: true, version: '1.0.0', env: process.env.NODE_ENV ?? 'development' })
