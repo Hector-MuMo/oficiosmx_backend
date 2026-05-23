@@ -26,12 +26,8 @@ router.get('/', (req, res) => {
   if (trade) { query += ' AND LOWER(c.trades) LIKE LOWER(?)'; params.push(`%${trade}%`) }
   if (zone)  { query += ' AND (LOWER(c.zone) LIKE LOWER(?) OR LOWER(c.coverage_zones) LIKE LOWER(?))'; params.push(`%${zone}%`, `%${zone}%`) }
   query += ' GROUP BY c.id'
-  const orderMap = {
-    rating:  'c.featured DESC, rating DESC, review_count DESC',
-    reviews: 'c.featured DESC, review_count DESC, rating DESC',
-    newest:  'c.featured DESC, c.created_at DESC',
-  }
-  query += ` ORDER BY ${orderMap[sort] ?? orderMap.rating}`
+  // Orden completamente aleatorio en cada búsqueda
+  query += ' ORDER BY RANDOM()'
   res.json({ ok: true, data: db.prepare(query).all(...params).map(parse) })
 })
 
