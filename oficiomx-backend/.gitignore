@@ -1,0 +1,21 @@
+# Dependencias
+node_modules/
+
+# Base de datos (Railway tiene volumen persistente)
+*.db
+*.db-shm
+*.db-wal
+
+# Entorno — NUNCA subir, contiene API keys
+.env
+
+# Logs
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
