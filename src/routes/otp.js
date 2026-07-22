@@ -48,14 +48,20 @@ router.post('/send', async (req, res) => {
   `).get(email, context)
 
   if (existing) {
-    const secondsLeft = Math.ceil((new Date(existing.expires_at) - Date.now()) / 1000)
-    if (secondsLeft > 9 * 60) {
-      // Bloqueado si el OTP tiene más de 1 min de vida (se pidió hace menos de 1 min)
+    const now = Date.now();
+    const expiresAtTime = new Date(existing.expires_at).getTime();
+    const secondsLeft = Math.ceil((expiresAtTime - now) / 1000);
+    const secondsSinceCreation = 600 - secondsLeft; // 600 son los 10 min de validez
+
+    // Si el código se creó hace menos de 60 segundos, bloqueamos para evitar SPAM
+    if (secondsSinceCreation < 60) {
+      const waitTime = Math.ceil(60 - secondsSinceCreation);
       return res.status(429).json({
         ok: false,
-        error: `Espera antes de pedir otro código (${Math.ceil((secondsLeft - 9*60))}s)`
-      })
+        error: `Espera ${waitTime} segundos antes de pedir otro código`
+      });
     }
+    // Si ya pasó 1 minuto, permitimos sobrescribir el código antiguo (borrándolo abajo)
   }
 
   cleanOldOtps(email, context)

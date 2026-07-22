@@ -26,8 +26,9 @@ router.get('/', (req, res) => {
   if (trade) { query += ' AND LOWER(c.trades) LIKE LOWER(?)'; params.push(`%${trade}%`) }
   if (zone)  { query += ' AND (LOWER(c.zone) LIKE LOWER(?) OR LOWER(c.coverage_zones) LIKE LOWER(?))'; params.push(`%${zone}%`, `%${zone}%`) }
   query += ' GROUP BY c.id'
-  // Orden completamente aleatorio en cada búsqueda
-  query += ' ORDER BY RANDOM()'
+  // Ordenar por mejor calificación primero, y luego por ID más reciente.
+  // Esto usa índices y es MUCHO más rápido que RANDOM() en tablas grandes.
+  query += ' ORDER BY COALESCE(rating, 0) DESC, c.id DESC'
   res.json({ ok: true, data: db.prepare(query).all(...params).map(parse) })
 })
 

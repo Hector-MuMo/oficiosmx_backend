@@ -4,6 +4,8 @@
 
 import express from 'express'
 import cors    from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 
 import otpRoutes        from './routes/otp.js'
 import contractorRoutes from './routes/contractors.js'
@@ -32,6 +34,22 @@ if (process.env.NODE_ENV === 'production') {
 
 const app  = express()
 const PORT = process.env.PORT ?? 3000
+
+// --------------------------------------------
+// NUEVO BLOQUE DE SEGURIDAD (PON ESTO AQUÍ)
+// --------------------------------------------
+app.use(helmet()) // Protege cabeceras HTTP
+
+// Limitador global: máx 100 peticiones por IP cada 15 minutos
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100,                // 100 peticiones
+  standardHeaders: true,   // Devuelve info en los headers (RateLimit-*)
+  legacyHeaders: false,    // Desactiva los viejos headers X-RateLimit-*
+  skip: (req) => req.path === '/api/health' // No limites el health check
+})
+app.use('/api/', globalLimiter) // Aplica a TODAS las rutas que empiecen con /api/
+// --------------------------------------------
 
 // En producción FRONTEND_URL debe ser tu dominio de Netlify
 // Ej: https://oficiomx.netlify.app
