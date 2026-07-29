@@ -67,7 +67,7 @@ app.use(cors({
     }
     cb(new Error('Origen no permitido por CORS'))
   },
-  methods: ['GET', 'POST', 'PATCH'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 }))
 app.use(express.json())
