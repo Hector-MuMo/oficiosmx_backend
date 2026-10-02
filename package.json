@@ -1,12 +1,15 @@
 {
   "name": "oficiomx-backend",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "description": "Backend de OficioMX",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node --env-file=.env src/index.js",
-    "dev": "node --env-file=.env --watch src/index.js"
+    "start": "node src/index.js",
+    "dev": "node --watch --env-file=.env src/index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
