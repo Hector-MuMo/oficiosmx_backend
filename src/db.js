@@ -5,13 +5,25 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const DB_PATH   = join(__dirname, '..', 'oficiomx.db')
-const SQL       = await initSqlJs()
+// En producción, DB_DIR=/data (el volume de Railway).
+// En desarrollo, se usa la raíz del proyecto.
+const DB_DIR = process.env.DB_DIR || join(__dirname, '..')
+
+// Asegurar que la carpeta existe (necesario la primera vez en el volume)
+if (!existsSync(DB_DIR)) {
+  mkdirSync(DB_DIR, { recursive: true })
+}
+
+const DB_PATH = join(DB_DIR, 'oficiomx.db')
+
+const SQL = await initSqlJs()
 
 let db
 if (existsSync(DB_PATH)) {
+  console.log(`[DB] Cargando base de datos desde ${DB_PATH}`)
   db = new SQL.Database(readFileSync(DB_PATH))
 } else {
+  console.log(`[DB] Creando base de datos nueva en ${DB_PATH}`)
   db = new SQL.Database()
 }
 
