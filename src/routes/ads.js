@@ -32,14 +32,14 @@ router.get('/active', (req, res) => {
 
   // Paso 1: desactivar automáticamente banners cuya fecha fin ya pasó.
   // Solo 1 parámetro '?' → .run(today)
-  db.prepare(`
-    UPDATE ads
-    SET    active = 0
-    WHERE  active = 1
-      AND  ends_at IS NOT NULL
-      AND  TRIM(ends_at) != ''
-      AND  SUBSTR(ends_at, 1, 10) < ?
-  `).run(today)
+  // db.prepare(`
+  //   UPDATE ads
+  //   SET    active = 0
+  //   WHERE  active = 1
+  //     AND  ends_at IS NOT NULL
+  //     AND  TRIM(ends_at) != ''
+  //     AND  SUBSTR(ends_at, 1, 10) < ?
+  // `).run(today)
 
   // Paso 2: traer banners activos dentro de rango.
   // La query tiene exactamente 2 '?' → .all(today, today)
@@ -112,6 +112,7 @@ router.patch('/:id', adminOnly, (req, res) => {
 
   // N campos + 1 id = N+1 parámetros exactos
   values.push(req.params.id)
+  
   db.prepare(`UPDATE ads SET ${fields.join(', ')} WHERE id = ?`).run(...values)
 
   const ad = db.prepare('SELECT * FROM ads WHERE id = ?').get(req.params.id)
