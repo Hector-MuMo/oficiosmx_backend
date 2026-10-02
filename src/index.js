@@ -35,8 +35,11 @@ if (process.env.NODE_ENV === 'production') {
 const app  = express()
 const PORT = process.env.PORT ?? 3000
 
+// Confiar en el primer proxy (Railway) para obtener la IP real del cliente
+app.set('trust proxy', 1)
+
 // --------------------------------------------
-// NUEVO BLOQUE DE SEGURIDAD (PON ESTO AQUÍ)
+// NUEVO BLOQUE DE SEGURIDAD
 // --------------------------------------------
 app.use(helmet()) // Protege cabeceras HTTP
 
