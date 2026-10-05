@@ -41,7 +41,7 @@ router.get('/active', (req, res) => {
   //     AND  SUBSTR(ends_at, 1, 10) < ?
   // `).run(today)
 
-  // Paso 2: traer banners activos dentro de rango.
+  // Paso 2: traer banners activos dentro de rango..
   // La query tiene exactamente 2 '?' → .all(today, today)
   const activeAds = db.prepare(`
     SELECT * FROM ads
