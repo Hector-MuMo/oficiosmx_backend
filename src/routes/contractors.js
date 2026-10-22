@@ -19,6 +19,16 @@ function parse(c) {
   return c;
 }
 
+function adminOnly(req, res, next) {
+  const incoming = (req.headers['x-admin-token'] ?? '').trim()
+  const expected = (process.env.ADMIN_TOKEN ?? '').trim()
+  if (!expected)
+    return res.status(500).json({ ok: false, error: 'ADMIN_TOKEN no configurado' })
+  if (!incoming || incoming !== expected)
+    return res.status(401).json({ ok: false, error: 'No autorizado' })
+  next()
+}
+
 
 // GET /api/contractors
 router.get("/", (req, res) => {
@@ -157,6 +167,24 @@ router.post("/", (req, res) => {
           .get(result.lastInsertRowid),
       ),
     });
+});
+
+router.patch('/:id/verify', adminOnly, (req, res) => {
+  const { verified } = req.body;
+  
+  if (verified === undefined) {
+    return res.status(400).json({ ok: false, error: 'Falta el campo verified' });
+  }
+
+  const contractor = db.prepare('SELECT id FROM contractors WHERE id = ?').get(req.params.id);
+  if (!contractor) {
+    return res.status(404).json({ ok: false, error: 'Contratista no encontrado' });
+  }
+
+  db.prepare('UPDATE contractors SET verified = ? WHERE id = ?').run(verified ? 1 : 0, req.params.id);
+  const updated = db.prepare('SELECT * FROM contractors WHERE id = ?').get(req.params.id);
+  
+  res.json({ ok: true, data: parse(updated) });
 });
 
 export default router;
