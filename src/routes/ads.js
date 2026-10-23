@@ -51,14 +51,6 @@ router.get('/active', (req, res) => {
     ORDER BY id ASC
   `).all(today, today)
 
-  // Paso 3: registrar impresión (fuera del loop de all para no re-preparar)
-  if (activeAds.length > 0) {
-    const ids = activeAds.map(a => a.id)
-    db.prepare(
-      `UPDATE ads SET impressions = impressions + 1 WHERE id IN (${ids.map(() => '?').join(',')})`
-    ).run(...ids)
-  }
-
   res.json({ ok: true, data: activeAds })
 })
 
