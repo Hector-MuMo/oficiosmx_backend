@@ -50,7 +50,7 @@ router.post('/', (req, res) => {
   const result = db.prepare(`
     INSERT INTO reviews (contractor_id, author_name, author_email, stars, body)
     VALUES (?, ?, ?, ?, ?)
-  `).run(contractor_id, author_name.trim(), author_email.trim(), Number(stars), body.trim())
+  `).run(contractor_id, normalizeName(author_name).trim(), author_email.trim(), Number(stars), body.trim())
 
   res.status(201).json({
     ok: true,
