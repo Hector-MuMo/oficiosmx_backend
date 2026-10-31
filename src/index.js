@@ -14,12 +14,18 @@ import reviewRoutes from "./routes/reviews.js";
 import adRoutes from "./routes/ads.js";
 
 // ── Validar variables de entorno críticas al arrancar ────────
-const REQUIRED_IN_PROD = ["RESEND_API_KEY", "ADMIN_TOKEN"];
-const WARN_IF_MISSING = ["ADMIN_TOKEN"];
+// RESEND_API_KEY ya no es obligatoria: el flujo de registro usa
+// verificación manual por WhatsApp y las reseñas están desactivadas.
+// Cuando se activen las reseñas, se debe configurar en Render.
 
-for (const key of WARN_IF_MISSING) {
+const REQUIRED_IN_PROD = ["ADMIN_TOKEN"];
+const RECOMMENDED_IN_PROD = ["RESEND_API_KEY", "FRONTEND_URL"];
+
+for (const key of RECOMMENDED_IN_PROD) {
   if (!process.env[key]?.trim()) {
-    console.warn(`[Config] ADVERTENCIA: ${key} no está definido en .env`);
+    console.warn(
+      `[Config] ADVERTENCIA: ${key} no está configurada (solo necesaria si activas reseñas o necesitas CORS estricto)`,
+    );
   }
 }
 
