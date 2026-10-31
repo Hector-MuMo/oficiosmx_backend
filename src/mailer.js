@@ -8,8 +8,6 @@
 
 import { Resend } from 'resend'
 
-import { Resend } from 'resend';
-
 const FROM = `${process.env.FROM_NAME ?? 'OficioMX'} <${process.env.FROM_EMAIL ?? 'onboarding@resend.dev'}>`;
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
