@@ -127,6 +127,7 @@ router.post("/", async (req, res) => {
       rate = "",
       avatar_color = "#1F6B4E",
       plan,
+      email,
     } = req.body;
 
     if (!name || !trades || !zone || !whatsapp || years_exp === undefined)
@@ -150,8 +151,8 @@ router.post("/", async (req, res) => {
     const result = await query(
       `
       INSERT INTO contractors
-        (name, trades, zone, coverage_zones, whatsapp, years_exp, availability, rate, avatar_color, plan)
-      VALUES ($1, $2::jsonb, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
+        (name, trades, zone, coverage_zones, whatsapp, years_exp, availability, rate, avatar_color, plan, email)
+      VALUES ($1, $2::jsonb, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `,
       [
@@ -165,6 +166,7 @@ router.post("/", async (req, res) => {
         rate.trim(),
         avatar_color || "#1F6B4E",
         safePlan,
+        email?.trim() || null,
       ],
     );
 
@@ -197,6 +199,108 @@ router.patch("/:id/verify", adminOnly, async (req, res) => {
     res.json({ ok: true, data: parse(result.rows[0]) });
   } catch (err) {
     console.error("[PATCH /contractors/:id/verify]", err);
+    res.status(500).json({ ok: false, error: "Error del servidor" });
+  }
+});
+
+// PATCH /api/contractors/:id  (admin)
+router.patch("/:id", adminOnly, async (req, res) => {
+  try {
+    const {
+      name,
+      whatsapp,
+      trades,
+      zone,
+      coverage_zones,
+      availability,
+      rate,
+      avatar_color,
+      verified,
+      email,
+      years_exp,
+    } = req.body;
+    const fields = [];
+    const values = [];
+
+    if (name !== undefined) {
+      fields.push(`name = $${values.length + 1}`);
+      values.push(name);
+    }
+    if (whatsapp !== undefined) {
+      fields.push(`whatsapp = $${values.length + 1}`);
+      values.push(String(whatsapp).replace(/\D/g, ""));
+    }
+    if (trades !== undefined) {
+      fields.push(`trades = $${values.length + 1}::jsonb`);
+      values.push(JSON.stringify(trades));
+    }
+    if (zone !== undefined) {
+      fields.push(`zone = $${values.length + 1}`);
+      values.push(zone);
+    }
+    if (coverage_zones !== undefined) {
+      fields.push(`coverage_zones = $${values.length + 1}::jsonb`);
+      values.push(JSON.stringify(coverage_zones));
+    }
+    if (availability !== undefined) {
+      fields.push(`availability = $${values.length + 1}`);
+      values.push(availability);
+    }
+    if (rate !== undefined) {
+      fields.push(`rate = $${values.length + 1}`);
+      values.push(rate);
+    }
+    if (avatar_color !== undefined) {
+      fields.push(`avatar_color = $${values.length + 1}`);
+      values.push(avatar_color);
+    }
+    if (verified !== undefined) {
+      fields.push(`verified = $${values.length + 1}`);
+      values.push(verified ? 1 : 0);
+    }
+    if (email !== undefined) {
+      fields.push(`email = $${values.length + 1}`);
+      values.push(email?.trim() || null);
+    }
+    if (years_exp !== undefined) {
+      fields.push(`years_exp = $${values.length + 1}`);
+      values.push(Number(years_exp));
+    }
+
+    if (!fields.length)
+      return res.status(400).json({ ok: false, error: "Nada que actualizar" });
+
+    values.push(req.params.id);
+    const result = await query(
+      `UPDATE contractors SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING *`,
+      values,
+    );
+
+    if (result.rowCount === 0)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Contratista no encontrado" });
+    res.json({ ok: true, data: parse(result.rows[0]) });
+  } catch (err) {
+    console.error("[PATCH /contractors/:id]", err);
+    res.status(500).json({ ok: false, error: "Error del servidor" });
+  }
+});
+
+// DELETE /api/contractors/:id  (admin)
+router.delete("/:id", adminOnly, async (req, res) => {
+  try {
+    const result = await query(
+      "DELETE FROM contractors WHERE id = $1 RETURNING id",
+      [req.params.id],
+    );
+    if (result.rowCount === 0)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Contratista no encontrado" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /contractors/:id]", err);
     res.status(500).json({ ok: false, error: "Error del servidor" });
   }
 });

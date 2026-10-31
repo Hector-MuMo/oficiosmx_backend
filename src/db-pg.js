@@ -71,5 +71,10 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_reviews_contractor ON reviews(contractor_id, status);
     CREATE INDEX IF NOT EXISTS idx_otp_email_context ON otp_codes(email, context);
   `);
+
+  await query(`
+    ALTER TABLE contractors ADD COLUMN IF NOT EXISTS email TEXT;
+  `);
+
   console.log("[DB] Tablas creadas/verificadas");
 }
