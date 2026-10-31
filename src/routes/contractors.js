@@ -1,23 +1,8 @@
-// src/routes/contractors.js
 import { Router } from "express";
-import db from "../db.js";
+import { query } from "../db-pg.js";
+import { normalizeName } from "../utils/normalize.js";
 
 const router = Router();
-
-function parse(c) {
-  if (!c) return null;
-  try {
-    c.trades = JSON.parse(c.trades);
-  } catch {
-    c.trades = [c.trades];
-  }
-  try {
-    c.coverage_zones = JSON.parse(c.coverage_zones);
-  } catch {
-    c.coverage_zones = [];
-  }
-  return c;
-}
 
 function adminOnly(req, res, next) {
   const incoming = (req.headers["x-admin-token"] ?? "").trim();
@@ -31,170 +16,189 @@ function adminOnly(req, res, next) {
   next();
 }
 
+// En Postgres, JSONB ya viene como array/objeto nativo. Dejamos el helper
+// por si acaso viene como string (p.ej. desde un driver alternativo).
+function parse(c) {
+  if (!c) return null;
+  if (typeof c.trades === "string") {
+    try {
+      c.trades = JSON.parse(c.trades);
+    } catch {
+      c.trades = [c.trades];
+    }
+  }
+  if (typeof c.coverage_zones === "string") {
+    try {
+      c.coverage_zones = JSON.parse(c.coverage_zones);
+    } catch {
+      c.coverage_zones = [];
+    }
+  }
+  return c;
+}
+
 // GET /api/contractors
-router.get("/", (req, res) => {
-  const { trade, zone, sort = "rating" } = req.query;
-  let query = `
-    SELECT c.*,
-      ROUND(AVG(r.stars), 1) AS rating,
-      COUNT(r.id)            AS review_count
-    FROM contractors c
-    LEFT JOIN reviews r ON r.contractor_id = c.id AND r.status = 'approved'
-    WHERE 1=1
-  `;
-  const params = [];
-  if (trade) {
-    query += " AND LOWER(c.trades) LIKE LOWER(?)";
-    params.push(`%${trade}%`);
+router.get("/", async (req, res) => {
+  try {
+    const { trade, zone } = req.query;
+    const params = [];
+    let whereClause = "";
+
+    if (trade) {
+      params.push(`%${trade}%`);
+      whereClause += ` AND trades::text ILIKE $${params.length}`;
+    }
+    if (zone) {
+      params.push(`%${zone}%`);
+      whereClause += ` AND (zone ILIKE $${params.length} OR coverage_zones::text ILIKE $${params.length})`;
+    }
+
+    const result = await query(
+      `
+      SELECT c.*,
+        ROUND(AVG(r.stars)::numeric, 1)::float AS rating,
+        COUNT(r.id)::int AS review_count
+      FROM contractors c
+      LEFT JOIN reviews r ON r.contractor_id = c.id AND r.status = 'approved'
+      WHERE 1=1 ${whereClause}
+      GROUP BY c.id
+      ORDER BY RANDOM()
+    `,
+      params,
+    );
+
+    res.json({ ok: true, data: result.rows.map(parse) });
+  } catch (err) {
+    console.error("[GET /contractors]", err);
+    res.status(500).json({ ok: false, error: "Error del servidor" });
   }
-  if (zone) {
-    query +=
-      " AND (LOWER(c.zone) LIKE LOWER(?) OR LOWER(c.coverage_zones) LIKE LOWER(?))";
-    params.push(`%${zone}%`, `%${zone}%`);
-  }
-  query += " GROUP BY c.id";
-  // Ordenar por mejor calificación primero, y luego por ID más reciente.
-  // Esto usa índices y es MUCHO más rápido que RANDOM() en tablas grandes.
-  // Solo agregar ORDER BY si se proporciona sort
-  if (req.query.sort === "rating") {
-    query += " ORDER BY rating DESC NULLS LAST";
-  } else if (req.query.sort === "reviews") {
-    query += " ORDER BY review_count DESC";
-  } else if (req.query.sort === "newest") {
-    query += " ORDER BY c.created_at DESC";
-  }
-  res.json({
-    ok: true,
-    data: db
-      .prepare(query)
-      .all(...params)
-      .map(parse),
-  });
 });
 
 // GET /api/contractors/:id
-router.get("/:id", (req, res) => {
-  const c = parse(
-    db
-      .prepare(
-        `
-    SELECT c.*,
-      ROUND(AVG(r.stars),1) AS rating,
-      COUNT(r.id)           AS review_count
-    FROM contractors c
-    LEFT JOIN reviews r ON r.contractor_id = c.id AND r.status = 'approved'
-    WHERE c.id = ? GROUP BY c.id
-  `,
-      )
-      .get(req.params.id),
-  );
-  if (!c)
-    return res
-      .status(404)
-      .json({ ok: false, error: "Contratista no encontrado" });
-  c.reviews = db
-    .prepare(
+router.get("/:id", async (req, res) => {
+  try {
+    const result = await query(
       `
-    SELECT id, author_name, stars, body, approved_at
-    FROM reviews WHERE contractor_id = ? AND status = 'approved'
-    ORDER BY approved_at DESC LIMIT 20
-  `,
-    )
-    .all(req.params.id);
-  res.json({ ok: true, data: c });
+      SELECT c.*,
+        ROUND(AVG(r.stars)::numeric, 1)::float AS rating,
+        COUNT(r.id)::int AS review_count
+      FROM contractors c
+      LEFT JOIN reviews r ON r.contractor_id = c.id AND r.status = 'approved'
+      WHERE c.id = $1
+      GROUP BY c.id
+    `,
+      [req.params.id],
+    );
+
+    const c = parse(result.rows[0]);
+    if (!c)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Contratista no encontrado" });
+
+    const reviewsRes = await query(
+      `
+      SELECT id, author_name, stars, body, approved_at
+      FROM reviews WHERE contractor_id = $1 AND status = 'approved'
+      ORDER BY approved_at DESC LIMIT 20
+    `,
+      [req.params.id],
+    );
+
+    c.reviews = reviewsRes.rows;
+    res.json({ ok: true, data: c });
+  } catch (err) {
+    console.error("[GET /contractors/:id]", err);
+    res.status(500).json({ ok: false, error: "Error del servidor" });
+  }
 });
 
 // POST /api/contractors
-router.post("/", (req, res) => {
-  const {
-    name,
-    trades,
-    zone,
-    coverage_zones = [],
-    whatsapp,
-    years_exp,
-    availability = "Lunes a sábado",
-    rate = "",
-    avatar_color = "#1F6B4E",
-    plan,
-  } = req.body;
+router.post("/", async (req, res) => {
+  try {
+    const {
+      name,
+      trades,
+      zone,
+      coverage_zones = [],
+      whatsapp,
+      years_exp,
+      availability = "Lunes a sábado",
+      rate = "",
+      avatar_color = "#1F6B4E",
+      plan,
+    } = req.body;
 
-  if (!name || !trades || !zone || !whatsapp || years_exp === undefined)
-    return res
-      .status(400)
-      .json({ ok: false, error: "Faltan campos obligatorios" });
+    if (!name || !trades || !zone || !whatsapp || years_exp === undefined)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Faltan campos obligatorios" });
 
-  if (!Array.isArray(trades) || trades.length === 0 || trades.length > 5)
-    return res
-      .status(400)
-      .json({ ok: false, error: "Selecciona entre 1 y 5 oficios" });
+    if (!Array.isArray(trades) || trades.length === 0 || trades.length > 5)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Selecciona entre 1 y 5 oficios" });
 
-  const wa = String(whatsapp).replace(/\D/g, "");
-  if (wa.length < 10)
-    return res
-      .status(400)
-      .json({ ok: false, error: "Número de WhatsApp inválido" });
+    const wa = String(whatsapp).replace(/\D/g, "");
+    if (wa.length < 10)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Número de WhatsApp inválido" });
 
-  const safePlan = ["free", "premium"].includes(plan) ? plan : "free";
+    const safePlan = ["free", "premium"].includes(plan) ? plan : "free";
 
-  const result = db
-    .prepare(
+    const result = await query(
       `
-    INSERT INTO contractors
-      (name, trades, zone, coverage_zones, whatsapp, years_exp, availability, rate, avatar_color, plan)
-    VALUES (?,?,?,?,?,?,?,?,?,?)
-  `,
-    )
-    .run(
-      name.trim(),
-      JSON.stringify(trades),
-      zone.trim(),
-      JSON.stringify(Array.isArray(coverage_zones) ? coverage_zones : []),
-      wa,
-      Number(years_exp),
-      availability.trim() || "Lunes a sábado",
-      rate.trim(),
-      avatar_color || "#1F6B4E",
-      safePlan,
+      INSERT INTO contractors
+        (name, trades, zone, coverage_zones, whatsapp, years_exp, availability, rate, avatar_color, plan)
+      VALUES ($1, $2::jsonb, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
+      RETURNING *
+    `,
+      [
+        normalizeName(name),
+        JSON.stringify(trades),
+        zone.trim(),
+        JSON.stringify(Array.isArray(coverage_zones) ? coverage_zones : []),
+        wa,
+        Number(years_exp),
+        availability.trim() || "Lunes a sábado",
+        rate.trim(),
+        avatar_color || "#1F6B4E",
+        safePlan,
+      ],
     );
 
-  res.status(201).json({
-    ok: true,
-    data: parse(
-      db
-        .prepare("SELECT * FROM contractors WHERE id = ?")
-        .get(result.lastInsertRowid),
-    ),
-  });
+    res.status(201).json({ ok: true, data: parse(result.rows[0]) });
+  } catch (err) {
+    console.error("[POST /contractors]", err);
+    res.status(500).json({ ok: false, error: "Error del servidor" });
+  }
 });
 
-router.patch("/:id/verify", adminOnly, (req, res) => {
-  const { verified } = req.body;
+// PATCH /api/contractors/:id/verify (admin)
+router.patch("/:id/verify", adminOnly, async (req, res) => {
+  try {
+    const { verified } = req.body;
+    if (verified === undefined)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Falta el campo verified" });
 
-  if (verified === undefined) {
-    return res
-      .status(400)
-      .json({ ok: false, error: "Falta el campo verified" });
+    const result = await query(
+      "UPDATE contractors SET verified = $1 WHERE id = $2 RETURNING *",
+      [verified ? 1 : 0, req.params.id],
+    );
+
+    if (result.rowCount === 0)
+      return res
+        .status(404)
+        .json({ ok: false, error: "Contratista no encontrado" });
+
+    res.json({ ok: true, data: parse(result.rows[0]) });
+  } catch (err) {
+    console.error("[PATCH /contractors/:id/verify]", err);
+    res.status(500).json({ ok: false, error: "Error del servidor" });
   }
-
-  const contractor = db
-    .prepare("SELECT id FROM contractors WHERE id = ?")
-    .get(req.params.id);
-  if (!contractor) {
-    return res
-      .status(404)
-      .json({ ok: false, error: "Contratista no encontrado" });
-  }
-
-  db.prepare("UPDATE contractors SET verified = ? WHERE id = ?").run(
-    verified ? 1 : 0,
-    req.params.id,
-  );
-  const updated = db
-    .prepare("SELECT * FROM contractors WHERE id = ?")
-    .get(req.params.id);
-
-  res.json({ ok: true, data: parse(updated) });
 });
 
 export default router;

@@ -8,9 +8,23 @@
 
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM   = `${process.env.FROM_NAME ?? 'OficioMX'} <${process.env.FROM_EMAIL ?? 'onboarding@resend.dev'}>`
-const IS_DEV = process.env.NODE_ENV !== 'production'
+import { Resend } from 'resend';
+
+const FROM = `${process.env.FROM_NAME ?? 'OficioMX'} <${process.env.FROM_EMAIL ?? 'onboarding@resend.dev'}>`;
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
+// 🔥 Lazy init: solo crear el cliente cuando se necesite
+let resendClient = null;
+function getResend() {
+  if (resendClient) return resendClient;
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    console.warn('[Mailer] RESEND_API_KEY no configurada. Los correos no se enviarán.');
+    return null;
+  }
+  resendClient = new Resend(apiKey);
+  return resendClient;
+}
 
 // ── Plantilla HTML del correo OTP ────────────────────────────
 function otpTemplate(code, contextLabel) {
@@ -102,5 +116,41 @@ export async function sendOtpEmail(to, code, contextLabel = 'Verificación de co
   } catch (err) {
     console.error('[Resend exception]', err)
     return { ok: false, error: 'Error enviando correo' }
+  }
+}
+
+export async function sendOtpEmail(to, code, contextLabel = 'Verificación de correo electrónico') {
+  if (IS_DEV) {
+    console.log('\n─────────────────────────────────────');
+    console.log(`[DEV] OTP para ${to}: ${code}`);
+    console.log(`[DEV] Contexto: ${contextLabel}`);
+    console.log('─────────────────────────────────────\n');
+    return { ok: true, dev: true };
+  }
+
+  const resend = getResend();
+  if (!resend) {
+    // En producción sin API key: fallar de forma controlada (no crash)
+    console.error('[Mailer] No se puede enviar correo: RESEND_API_KEY no configurada');
+    return { ok: false, error: 'Servicio de correos no configurado' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from:    FROM,
+      to:      [to],
+      subject: `Tu código de verificación OficioMX: ${code}`,
+      html:    otpTemplate(code, contextLabel),
+    });
+
+    if (error) {
+      console.error('[Resend error]', error);
+      return { ok: false, error: error.message };
+    }
+
+    return { ok: true, emailId: data.id };
+  } catch (err) {
+    console.error('[Resend exception]', err);
+    return { ok: false, error: 'Error enviando correo' };
   }
 }
