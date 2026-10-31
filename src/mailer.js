@@ -89,36 +89,6 @@ function otpTemplate(code, contextLabel) {
 // ── Función principal ─────────────────────────────────────────
 export async function sendOtpEmail(to, code, contextLabel = 'Verificación de correo electrónico') {
   if (IS_DEV) {
-    // En desarrollo: imprime en consola, no gasta cuota de Resend
-    console.log('\n─────────────────────────────────────')
-    console.log(`[DEV] OTP para ${to}: ${code}`)
-    console.log(`[DEV] Contexto: ${contextLabel}`)
-    console.log('─────────────────────────────────────\n')
-    return { ok: true, dev: true }
-  }
-
-  try {
-    const { data, error } = await resend.emails.send({
-      from:    FROM,
-      to:      [to],
-      subject: `Tu código de verificación OficioMX: ${code}`,
-      html:    otpTemplate(code, contextLabel),
-    })
-
-    if (error) {
-      console.error('[Resend error]', error)
-      return { ok: false, error: error.message }
-    }
-
-    return { ok: true, emailId: data.id }
-  } catch (err) {
-    console.error('[Resend exception]', err)
-    return { ok: false, error: 'Error enviando correo' }
-  }
-}
-
-export async function sendOtpEmail(to, code, contextLabel = 'Verificación de correo electrónico') {
-  if (IS_DEV) {
     console.log('\n─────────────────────────────────────');
     console.log(`[DEV] OTP para ${to}: ${code}`);
     console.log(`[DEV] Contexto: ${contextLabel}`);
